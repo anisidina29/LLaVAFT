@@ -2,11 +2,11 @@
 
 deepspeed llava/train/train_mem.py \
     --lora_enable True --lora_r 128 --lora_alpha 256 --mm_projector_lr 2e-5 \
-    --deepspeed ./scripts/zero3.json \
+    --deepspeed ./scripts/zero3_offload.json \
     --model_name_or_path liuhaotian/llava-v1.5-7b \
     --version v1 \
-    --data_path /home/ray/image-to-code/smart-consumer-dev/img2code-test/processed.json \
-    --image_folder /home/ray/image-to-code/smart-consumer-dev/img2code-test/image \
+    --data_path /efs/shared_storage/img2code/WebSight/processed/train-00000-of-00738-80a58552f2fb3344.json \
+    --image_folder /efs/shared_storage/img2code/WebSight/processed/image \
     --vision_tower openai/clip-vit-large-patch14-336 \
     --mm_projector_type mlp2x_gelu \
     --mm_vision_select_layer -2 \
@@ -17,7 +17,7 @@ deepspeed llava/train/train_mem.py \
     --bf16 True \
     --output_dir ./checkpoints/llava-v1.5-7b-lora \
     --num_train_epochs 1 \
-    --per_device_train_batch_size 2 \
+    --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps 1 \
     --evaluation_strategy "no" \
