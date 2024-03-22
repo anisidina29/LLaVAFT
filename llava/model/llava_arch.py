@@ -93,7 +93,7 @@ class LlavaMetaModel:
             mm_projector_weights = torch.load(pretrain_mm_mlp_adapter, map_location='cpu')
             def get_w(weights, keyword):
                 return {k.split(keyword + '.')[1]: v for k, v in weights.items() if keyword in k}
-
+            breakpoint()
             self.mm_projector.load_state_dict(get_w(mm_projector_weights, 'mm_projector'))
 
 
