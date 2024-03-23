@@ -17,7 +17,7 @@ deepspeed llava/train/train_mem.py \
     --group_by_modality_length True \
     --bf16 True \
     --output_dir /efs/shared_storage/img2code/checkpoints/llava-v1.6-vicuna-7b-lora \
-    --num_train_epochs 2 \
+    --num_train_epochs 1 \
     --per_device_train_batch_size 64 \
     --per_device_eval_batch_size 128 \
     --gradient_accumulation_steps 1 \
