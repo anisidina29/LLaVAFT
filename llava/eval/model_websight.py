@@ -1,3 +1,4 @@
+"""Run on 1 machine"""
 import argparse
 import torch
 import os
@@ -8,7 +9,7 @@ import shortuuid
 from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
 from llava.conversation import conv_templates, SeparatorStyle
 from llava.model.builder import load_pretrained_model
-from llava.utils import disable_torch_init
+from llava.utils import disable_torch_init, get_conv_mode
 from llava.mm_utils import tokenizer_image_token, process_images, get_model_name_from_path
 
 from PIL import Image
@@ -16,12 +17,15 @@ import math
 
 def split_list(lst, n):
     """Split a list into n (roughly) equal-sized chunks"""
-    chunk_size = math.ceil(len(lst) / n)  # integer division
-    return [lst[i:i+chunk_size] for i in range(0, len(lst), chunk_size)]
+    # The original code (now commented out) will cause list index out of range
+    # chunk_size = math.ceil(len(lst) / n)  # integer division
+    # return [lst[i:i+chunk_size] for i in range(0, len(lst), chunk_size)]
+    return [lst[i::n] for i in range(n)] # grabbing every 8th (nth) element, offsetting by n. The returned index will be out of order
 
 
 def get_chunk(lst, n, k):
     chunks = split_list(lst, n)
+    print("CHUNKS:", len(chunks))
     return chunks[k]
 
 
@@ -34,9 +38,12 @@ def eval_model(args):
 
     questions = [json.loads(q) for q in open(os.path.expanduser(args.question_file), "r")]
     questions = get_chunk(questions, args.num_chunks, args.chunk_idx)
+    print("LEN QUESTIONS", len(questions))
     answers_file = os.path.expanduser(args.answers_file)
-    os.makedirs(os.path.dirname(answers_file), exist_ok=True)
+    if '/' in answers_file:
+        os.makedirs(os.path.dirname(answers_file), exist_ok=True)
     ans_file = open(answers_file, "w")
+    conv_mode = get_conv_mode(model_name, args)
     for line in tqdm(questions):
         idx = line["question_id"]
         image_file = line["image"]
@@ -47,7 +54,7 @@ def eval_model(args):
         else:
             qs = DEFAULT_IMAGE_TOKEN + '\n' + qs
 
-        conv = conv_templates[args.conv_mode].copy()
+        conv = conv_templates[conv_mode].copy()
         conv.append_message(conv.roles[0], qs)
         conv.append_message(conv.roles[1], None)
         prompt = conv.get_prompt()
@@ -84,12 +91,12 @@ def eval_model(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model-path", type=str, default="facebook/opt-350m")
+    parser.add_argument("--model-path", type=str, default="liuhaotian/llava-v1.6-mistral-7b")
     parser.add_argument("--model-base", type=str, default=None)
-    parser.add_argument("--image-folder", type=str, default="")
-    parser.add_argument("--question-file", type=str, default="tables/question.jsonl")
-    parser.add_argument("--answers-file", type=str, default="answer.jsonl")
-    parser.add_argument("--conv-mode", type=str, default="llava_v1")
+    parser.add_argument("--image-folder", type=str, default="/efs/shared_storage/img2code/WebSight/processed/image")
+    parser.add_argument("--question-file", type=str, default="img2code-test/short-questions.jsonl")
+    parser.add_argument("--answers-file", type=str, default="llava_answers.jsonl")
+    parser.add_argument("--conv-mode", type=str, default="mistral_instruct")
     parser.add_argument("--num-chunks", type=int, default=1)
     parser.add_argument("--chunk-idx", type=int, default=0)
     parser.add_argument("--temperature", type=float, default=0.2)
