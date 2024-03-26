@@ -25,7 +25,6 @@ def split_list(lst, n):
 
 def get_chunk(lst, n, k):
     chunks = split_list(lst, n)
-    print("CHUNKS:", len(chunks))
     return chunks[k]
 
 
@@ -38,7 +37,6 @@ def eval_model(args):
 
     questions = [json.loads(q) for q in open(os.path.expanduser(args.question_file), "r")]
     questions = get_chunk(questions, args.num_chunks, args.chunk_idx)
-    print("LEN QUESTIONS", len(questions))
     answers_file = os.path.expanduser(args.answers_file)
     if '/' in answers_file:
         os.makedirs(os.path.dirname(answers_file), exist_ok=True)
