@@ -27,7 +27,7 @@ for IDX in $(seq 0 $((CHUNKS-1))); do
         --chunk-idx $IDX \
         --temperature 0 \
         --max_new_tokens 2048 \
-        --conv-mode mistral_instruct &
+        --conv-mode chatml_direct &
 done
 
 wait

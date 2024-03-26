@@ -6,7 +6,7 @@ IFS=',' read -ra GPULIST <<< "$CUDA_VISIBLE_DEVICES"
 
 CHUNKS=${#GPULIST[@]}
 
-CKPT="llava-v1.6-mistral-7b"
+CKPT="llava-v1.6-vicuna-7b"
 SPLIT="train-00000-of-00738-80a58552f2fb3344"
 WORKSPACE="/home/ray/image2code-mar22"
 ANSDIR="${WORKSPACE}/data/predictions/raw"
@@ -19,15 +19,15 @@ current_ts=$(date '+%Y-%m-%d-%H-%M-%S')
 
 for IDX in $(seq 0 $((CHUNKS-1))); do
     CUDA_VISIBLE_DEVICES=${GPULIST[$IDX]} python -m llava.eval.model_websight \
-        --model-path liuhaotian/llava-v1.6-mistral-7b \
-        --question-file ${WORKSPACE}/data/eval-queries/questions-64.jsonl \
+        --model-path liuhaotian/llava-v1.6-vicuna-7b \
+        --question-file ${WORKSPACE}/data/eval-queries/questions-10.jsonl \
         --image-folder /efs/shared_storage/img2code/eval-d2c \
         --answers-file ${ANSDIR}/${CKPT}/${SPLIT}/${current_ts}/${CHUNKS}_${IDX}.jsonl \
         --num-chunks $CHUNKS \
         --chunk-idx $IDX \
         --temperature 0 \
         --max_new_tokens 2048 \
-        --conv-mode mistral_instruct &
+        --conv-mode llava_v1 &
 done
 
 wait
@@ -43,7 +43,6 @@ for IDX in $(seq 0 $((CHUNKS-1))); do
 done
 
 python scripts/convert_websight_for_eval.py --ansdir $ANSDIR --split $SPLIT --ckpt $CKPT --htmldir $LOCAL_HTMLDIR --ts $current_ts
-
 # To evaluate, need to:
 # 1. Copy the generated HTML to your desktop (so that it can open a chromimum)
 # 2. Generate screenshots
