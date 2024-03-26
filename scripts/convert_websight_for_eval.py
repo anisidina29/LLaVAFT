@@ -15,14 +15,14 @@ def parse_args():
     parser.add_argument('--ckpt', type=str, default=CKPT)
     parser.add_argument('--split', type=str, default=SPLIT)
     parser.add_argument('--htmldir', type=str, default=HTMLDIR)
-    # parser.add_argument('--split', type=str, required=True)
+    parser.add_argument('--ts', type=str, required=True)
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     args = parse_args()
-    curr_dir = os.path.join(args.ansdir, args.split, args.ckpt)
-    outdir = f'{args.htmldir}/{args.split}/{args.ckpt}'
+    curr_dir = os.path.join(args.ansdir, args.ckpt, args.split, args.ts)
+    outdir = f'{args.htmldir}/{args.ckpt}/{args.split}/{args.ts}'
     os.makedirs(outdir, exist_ok=True)
     src = os.path.join(curr_dir, 'merge.jsonl')
     data = []

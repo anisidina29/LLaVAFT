@@ -61,12 +61,17 @@ def extract_text(html_url):
 def get_text_similarity(pred_path, ref_path):
     pred_text = extract_text(pred_path)
     ref_text = extract_text(ref_path)
-    return SequenceMatcher(None, pred_text, ref_text).ratio()
+    text_sim = SequenceMatcher(None, pred_text, ref_text).ratio()
+    wer = compute_wer(pred_text, ref_text)
+    return text_sim, wer
+
 
 
 def evaluate_pair(clip_model, clip_preprocess, pred_path, ref_path, device):
+    text_sim, wer = get_text_similarity(pred_path, ref_path)
     return {
-            'text_sim': get_text_similarity(pred_path, ref_path),
+            'text_sim': text_sim,
+            'wer': wer,
             'clip_sim': get_clip_similarity(clip_model, clip_preprocess, pred_path, ref_path, device)
         }
 
@@ -84,7 +89,7 @@ def eval_batch(pred_dir, ref_dir, clip_model_name='ViT-B/32'):
 
     assert len(pred_fnames) == len(ref_fnames)
     print ("total #egs: ", len(pred_fnames))
-    text_sims, clip_sims = {}, {}
+    wers, text_sims, clip_sims = {}, {}, {}
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     clip_model, clip_preprocess = clip.load(clip_model_name, device=device)
@@ -98,37 +103,83 @@ def eval_batch(pred_dir, ref_dir, clip_model_name='ViT-B/32'):
         scores = evaluate_pair(clip_model, clip_preprocess, pred_path, ref_path, device)
         text_sims[fname] = scores['text_sim']
         clip_sims[fname] = scores['clip_sim']
-    return text_sims, clip_sims
+        wers[fname] = scores['wer']
+    return text_sims, clip_sims, wers
 
 
-def get_score_stats(sims, outfile, corrupt_threshold=0.1, bad_threshold=0.5):
+def get_score_stats(sims, outfile, corrupt_threshold=0.1, bad_threshold=0.6):
     n = len(sims)
     a = np.asarray(list(sims.values()))
     names = np.asarray(list(sims.keys()))
-    corrupts = names[a < corrupt_threshold]
-    nc = len(corrupts)
-    outfile.write(f'{nc} samples ({nc * 100 / n:.2f}%) with sim score < {corrupt_threshold}\n')
-    for name in corrupts:
-        outfile.write(f'\t{name}: {sims[name]}\n')
-    bads = names[a < bad_threshold]
-    nb = len(bads)
-    outfile.write(f'{nb} samples ({nb * 100 / n:.2f}%) with sim score < {bad_threshold}\n')
-    for name in bads:
-        outfile.write(f'\t{name}: {sims[name]}\n')
     sorted_sims = sorted(sims.items(), key=lambda item: item[1], reverse=True)
     best = sorted_sims[0]
     worst = sorted_sims[-1]
-    outfile.write(f'Mean: {a.mean():.6f} | Median: {np.median(a):.6f}\n')
-    outfile.write(f'Max similarity: {best[-1]:.6f} by {best[0]}\n')
-    outfile.write(f'Min similarity: {worst[-1]:.6f} by {worst[0]}\n')
+    outfile.write('mean,median,max,min\n')
+    outfile.write(f'{a.mean():.6f},{np.median(a):.6f},{best[-1]:.6f},{worst[-1]:.6f}\n')
+    outfile.write(f'Max: {best[-1]:.6f} by {best[0]}\n')
+    outfile.write(f'Min: {worst[-1]:.6f} by {worst[0]}\n')
+    if corrupt_threshold < 0.8:
+        corrupts = names[a < corrupt_threshold]
+        op = '<'
+    else:
+        corrupts = names[a > corrupt_threshold]
+        op = '>'
+    nc = len(corrupts)
+    outfile.write(f'{nc} samples ({nc * 100 / n:.2f}%) with score {op} {corrupt_threshold} (HTML code is likely corrupted).\n')
+    for name in corrupts:
+        outfile.write(f'\t{name}: {sims[name]}\n')
+    if corrupt_threshold <= 0.8:
+        bads = names[a < bad_threshold]
+        nb = len(bads)
+        outfile.write(f'{nb} samples ({nb * 100 / n:.2f}%) with score < {bad_threshold}\n')
+        for name in bads:
+            outfile.write(f'\t{name}: {sims[name]}\n')
 
 
-def report_stats(text_sims, clip_sims, outfile):    
-    outfile.write('TEXT SIMILARITY\n')
-    get_score_stats(text_sims, outfile, corrupt_threshold=0.1, bad_threshold=0.6)
-    outfile.write('=' * 30 + '\n')
+def report_stats(text_sims, clip_sims, wers, outfile, corrupt_threshold=0.1, bad_threshold=0.6):    
     outfile.write('CLIP SIMILARITY\n')
-    get_score_stats(clip_sims, outfile, corrupt_threshold=0.1, bad_threshold=0.6)
+    get_score_stats(clip_sims, outfile, corrupt_threshold, bad_threshold)
+    outfile.write('=' * 30 + '\n')
+    outfile.write('TEXT SIMILARITY\n')
+    get_score_stats(text_sims, outfile, corrupt_threshold, bad_threshold)
+    outfile.write('=' * 30 + '\n')
+    outfile.write('WER\n')
+    get_score_stats(wers, outfile, 1.0, 1.0)
+
+
+def compute_wer_algo(pred_words, ref_words):
+    # Create a matrix for the dynamic programming algorithm
+    d = [[0 for _ in range(len(pred_words) + 1)] for _ in range(len(ref_words) + 1)]
+
+    # Initialize the first row and column of the matrix
+    for i in range(len(ref_words) + 1):
+        d[i][0] = i
+    for j in range(len(pred_words) + 1):
+        d[0][j] = j
+
+    # Populate the matrix
+    for i in range(1, len(ref_words) + 1):
+        for j in range(1, len(pred_words) + 1):
+            substitution_cost = 0 if ref_words[i - 1] == pred_words[j - 1] else 1
+            d[i][j] = min(
+                d[i - 1][j] + 1,  # Deletion
+                d[i][j - 1] + 1,  # Insertion
+                d[i - 1][j - 1] + substitution_cost  # Substitution
+            )
+
+    # The bottom right corner of the matrix contains the WER
+    wer_value = d[len(ref_words)][len(pred_words)] / float(len(ref_words))
+    return wer_value
+
+def compute_wer(pred_text, ref_text, uncased=True):
+    if uncased:
+        ground_truth = ref_text.strip().lower()
+        ocr_output = pred_text.strip().lower()
+    ref_words = ref_text.split()
+    ref_words = [w for w in ref_words if w]
+    pred_words = pred_text.split()
+    pred_words = [w for w in pred_words if w]
+    return compute_wer_algo(pred_words, ref_words)
 
 
 RESDIR = '/home/ray/image2code-mar22/results'
@@ -146,21 +197,23 @@ def parse_args():
     parser.add_argument('--split', type=str, default=SPLIT)
     parser.add_argument('--htmldir', type=str, default=HTMLDIR)
     parser.add_argument('--clip', type=str, default=CLIP_MODEL_NAME)
+    parser.add_argument('--ts', type=str, required=True)
+    parser.add_argument('--corrupt-threshold', type=float, default=0.1)
+    parser.add_argument('--bad-threshold', type=float, default=0.6)
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     args = parse_args()
-    pred_dir = os.path.join(args.htmldir, args.split, args.ckpt)
-    text_sims, clip_sims = eval_batch(pred_dir, args.refdir)
-    stats_dir = os.path.join(args.resdir, args.split, args.ckpt)
+    pred_dir = os.path.join(args.htmldir, args.ckpt, args.split, args.ts)
+    text_sims, clip_sims, wers = eval_batch(pred_dir, args.refdir)
+    stats_dir = os.path.join(args.resdir, args.ckpt, args.split)
     os.makedirs(stats_dir, exist_ok=True)
-    ts = datetime.now().strftime("%Y-%m-%d-%H-%M")
-    fname = f'{stats_dir}/{ts}.txt'
+    fname = f'{stats_dir}/{args.ts}.txt'
     outfile = open(fname, 'w')
     outfile.write(f'Partition: {args.split}.\n{len(text_sims)} samples.\n')
     outfile.write(f'Model: {args.ckpt}\n')
 
-    report_stats(text_sims, clip_sims, outfile)
+    report_stats(text_sims, clip_sims, wers, outfile, args.corrupt_threshold, args.bad_threshold)
     outfile.close()
     

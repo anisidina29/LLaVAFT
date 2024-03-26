@@ -42,6 +42,25 @@ def eval_model(args):
         os.makedirs(os.path.dirname(answers_file), exist_ok=True)
     ans_file = open(answers_file, "w")
     conv_mode = get_conv_mode(model_name, args)
+    config_fname = f'{os.path.dirname(answers_file)}/config.json'
+    if args.chunk_idx == 0:
+        # Write to file
+        with open(config_fname, "w") as fp:
+            config = {
+                "model_base": model_name,
+                "conv_mode": conv_mode,
+                "temperature": args.temperature,
+                "top_p": args.top_p,
+                "num_beams": args.num_beams,
+                "max_new_tokens": args.max_new_tokens,
+                "context_len": context_len,
+                "question-file": args.question_file,
+                "answer_file": answers_file,
+                "image_folder": args.image_folder,
+                "prompt": questions[0]["text"],
+            }
+            json.dump(config, fp, indent=4)
+    
     for line in tqdm(questions):
         idx = line["question_id"]
         image_file = line["image"]
@@ -72,7 +91,7 @@ def eval_model(args):
                 top_p=args.top_p,
                 num_beams=args.num_beams,
                 # no_repeat_ngram_size=3,
-                max_new_tokens=1024,
+                max_new_tokens=args.max_new_tokens,
                 use_cache=True)
 
         outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
@@ -100,6 +119,7 @@ if __name__ == "__main__":
     parser.add_argument("--temperature", type=float, default=0.2)
     parser.add_argument("--top_p", type=float, default=None)
     parser.add_argument("--num_beams", type=int, default=1)
+    parser.add_argument("--max_new_tokens", type=int, default=1024)
     args = parser.parse_args()
 
     eval_model(args)
