@@ -1,5 +1,6 @@
 import argparse
 import os
+import shutil
 
 import clip
 import numpy as np
@@ -207,12 +208,13 @@ if __name__ == '__main__':
     args = parse_args()
     pred_dir = os.path.join(args.htmldir, args.ckpt, args.split, args.ts)
     text_sims, clip_sims, wers = eval_batch(pred_dir, args.refdir)
-    stats_dir = os.path.join(args.resdir, args.ckpt, args.split)
+    stats_dir = os.path.join(args.resdir, args.ckpt, args.split, args.ts)
     os.makedirs(stats_dir, exist_ok=True)
-    fname = f'{stats_dir}/{args.ts}.txt'
+    shutil.copy2(os.path.join(pred_dir, 'config.json'), os.path.join(stats_dir, 'config.json'))
+    fname = f'{stats_dir}/results.txt'
     outfile = open(fname, 'w')
     outfile.write(f'Partition: {args.split}.\n{len(text_sims)} samples.\n')
-    outfile.write(f'Model: {args.ckpt}\n')
+    outfile.write(f'Model: {args.ckpt}. Timestamp: {args.ts}\n')
 
     report_stats(text_sims, clip_sims, wers, outfile, args.corrupt_threshold, args.bad_threshold)
     outfile.close()
